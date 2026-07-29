@@ -134,6 +134,41 @@ npm run dev
 
 데모 버전은 Netlify에 배포해 두었습니다.
 
+## Codex 스킬
+
+이 저장소에는 FlowCraft 작업 흐름을 Codex에 전달하는
+[`flowcraft-codex-handoff`](skills/flowcraft-codex-handoff/SKILL.md) 스킬이
+포함되어 있습니다.
+
+계획 모드에서 만든 메타프롬프트를 FlowCraft v2 DAG로 정리하고 다음 세
+자료를 한 묶음으로 준비합니다.
+
+- 원래 의도와 제약을 보존한 `original-plan.md`
+- 작업 순서와 병렬 구조가 담긴 `workflow-prompt.md`
+- 확대해도 선명한 노드·화살표 이미지 `workflow-map.svg`
+
+Markdown 작업 지시서가 실제 실행 기준이며, 원본 계획과 노드 이미지는
+의도와 전체 구조를 확인하는 보조 자료입니다.
+
+스킬 폴더를 Codex 개인 스킬 폴더에 복사합니다.
+
+```bash
+cp -R skills/flowcraft-codex-handoff ~/.codex/skills/
+```
+
+새 Codex 작업에서 다음처럼 호출할 수 있습니다.
+
+```text
+$flowcraft-codex-handoff로 이 계획을 Codex 전달용으로 구성해줘.
+```
+
+스킬 자체 검사는 실제 전달 파일을 만들지 않는 self-test로 수행할 수
+있습니다.
+
+```bash
+python3 ~/.codex/skills/flowcraft-codex-handoff/scripts/flowcraft_handoff.py --self-test
+```
+
 ## 개발자를 위한 정보
 
 - Next.js 16, React 19, Vinext/Vite

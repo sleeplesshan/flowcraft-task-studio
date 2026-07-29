@@ -1,0 +1,4 @@
+interface:
+  display_name: "FlowCraft Codex Handoff"
+  short_description: "계획·작업 지시서·그래프 이미지를 Codex에 전달"
+  default_prompt: "$flowcraft-codex-handoff로 이 계획을 원본 계획, FlowCraft 실행 프롬프트, 노드 맵으로 묶어 주세요."
