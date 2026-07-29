@@ -140,6 +140,14 @@ npm run dev
 - Tailwind CSS 4
 - React Flow, Zustand, Zod, Dagre, Lucide
 
+## 기여와 지원
+
+- [기여 방법](CONTRIBUTING.md)
+- [행동강령](CODE_OF_CONDUCT.md)
+- [보안 취약점 제보](SECURITY.md)
+- [지원 안내](SUPPORT.md)
+- [MIT 라이선스](LICENSE)
+
 검증 명령:
 
 ```bash
