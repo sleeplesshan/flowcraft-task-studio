@@ -16,15 +16,17 @@ from pathlib import Path
 from typing import Any
 
 
-SYSTEM_HARNESS = """> ⚠️ **[System Harness: Strict Timeout & Interruption Policy]**
-> 메인 에이전트는 서브 에이전트에게 작업을 할당한 후, 서브 에이전트의 처리가 늦어지더라도 **절대 개입하거나 재촉하지 마십시오.**
-> "지금 나온 데까지 정리해!", "요약해서 가져와!"와 같이 응답을 강제로 중단시키거나 불완전한 상태에서 출력을 요구하는 행위는 엄격히 금지됩니다. 반드시 서브 에이전트의 전체 프로세스가 완료되어 최종 결과물을 반환할 때까지 대기(Wait) 상태를 유지해야 합니다."""
+SYSTEM_HARNESS = """> ⚠️ **[System Harness: Patient Wait & Evidence-Based Stall Recovery]**
+> 메인 에이전트는 서브 에이전트에게 유의미한 진행 신호가 있는 동안, 단지 오래 걸린다는 이유로 재촉하거나 중단하지 않고 완료까지 기다립니다.
+> 시간 경과만으로 정체를 판단하지 않습니다. 런타임의 `failed | cancelled` 반환, 세션·도구의 명시적 timeout 또는 연결 소실, 같은 오류나 같은 동작이 새 결과 없이 3회 이상 반복되는 경우를 객관적 정체 신호로 봅니다.
+> 객관적 신호가 불충분하면 상태 확인을 최대 1회 수행한 뒤 제공자 환경에 맞는 한 번의 관찰 구간을 더 기다립니다. 새 메시지, 도구 성공, 파일 변경 등 진행 신호가 확인되면 기존 에이전트를 계속 기다립니다."""
 
-FAILURE_POLICY = """> 🛡️ **[Failure Policy: Bounded Retry & Dependency Isolation]**
-> 각 작업의 terminal state는 `success | failed | cancelled` 중 하나로 기록합니다.
-> 런타임 또는 제공자가 `failed`를 반환하면 동일한 작업 범위와 완료 조건으로 최대 1회만 재시도합니다.
-> 두 번째 실패 또는 `cancelled` 이후에는 해당 결과에 의존하는 작업만 중단하고, 독립적인 분기는 계속 진행해 완료할 수 있습니다.
-> 메인 에이전트는 중단이나 불완전한 요약을 요구하지 않으며, 최종 보고에 실패 원인과 차단된 의존 작업을 명시합니다."""
+FAILURE_POLICY = """> 🛡️ **[Failure Policy: Checkpoint Recovery & Bounded Replacement]**
+> 각 작업의 provider terminal state는 `success | failed | cancelled`로 기록하고, 위 객관적 정체 조건을 충족한 비종료 작업은 오케스트레이션 상태 `stalled`로 기록합니다.
+> `failed | cancelled | stalled`이면 해당 에이전트만 중단하고, 확보 가능한 메시지·변경 파일·로그·부분 산출물을 체크포인트로 1회 회수합니다. 불완전한 체크포인트를 `success`로 간주하지 않습니다.
+> 체크포인트가 완료 조건을 충족하면 그 결과로 다음 의존 작업을 진행합니다. 일부만 유효하면 완료·미완료 범위를 기록하고 후속 작업의 입력과 목표를 안전하게 충족할 수 있는지 검증합니다. 가능하면 누락 범위와 품질 한계를 전달한 축소 범위로 계속하고, 불가능하면 독립 작업만 계속합니다.
+> 남은 작업이 필요하면 원래 작업 계약, 검증된 체크포인트, 미완료 범위, 실패 원인을 새 대체 서브 에이전트에게 전달하여 최대 1회만 이어서 수행합니다. 기존 에이전트와 대체 에이전트를 동시에 실행하지 않고 완료된 범위를 다시 수행하지 않습니다.
+> 대체 시도도 실패·취소·정체되면 해당 결과에 의존하는 작업만 중단하고 독립 분기는 계속합니다. 최종 보고에는 정체 근거, 회수한 결과, 대체 여부, 남은 공백과 차단된 의존 작업을 명시합니다."""
 
 REQUIRED_DATA_FIELDS = {
     "title",
@@ -401,7 +403,8 @@ def build_markdown(plan: str, graph: dict[str, Any], max_subagents: int) -> str:
 - **전체 노드 허용 상한:** 최대 {max_subagents + 4}개
 - **현재 위임 작업:** {delegated_count}개
 - `assignee: main` 작업은 메인 에이전트가 직접 수행합니다.
-- `assignee: delegated` 작업마다 최대 한 개의 서브 에이전트만 생성합니다.
+- `assignee: delegated` 작업마다 기본 서브 에이전트 한 개를 실행하며, 객관적 정체·실패가 확인된 경우에만 같은 계약을 이어받는 대체 에이전트를 최대 한 번 순차 실행합니다.
+- 기존 에이전트와 대체 에이전트를 동시에 실행하지 않으며, 대체 시도는 새 작업 노드를 추가하지 않습니다.
 - 정의된 작업을 역할별로 다시 분해하여 추가 서브 에이전트를 만들지 않습니다.
 
 ## [전체 작업 목표]
@@ -676,6 +679,16 @@ def run_self_test() -> dict[str, Any]:
     assert payload["workflow-prompt.md"].startswith(
         f"{SYSTEM_HARNESS}\n\n{FAILURE_POLICY}"
     )
+    assert "시간 경과만으로 정체를 판단하지 않습니다" in SYSTEM_HARNESS
+    assert "새 결과 없이 3회 이상 반복" in SYSTEM_HARNESS
+    assert "상태 확인을 최대 1회" in SYSTEM_HARNESS
+    assert "오케스트레이션 상태 `stalled`" in FAILURE_POLICY
+    assert "체크포인트로 1회 회수" in FAILURE_POLICY
+    assert "대체 서브 에이전트" in FAILURE_POLICY
+    assert "완료된 범위를 다시 수행하지 않습니다" in FAILURE_POLICY
+    assert "품질 한계를 전달한 축소 범위" in FAILURE_POLICY
+    assert "대체 에이전트를 최대 한 번 순차 실행" in payload["workflow-prompt.md"]
+    assert "대체 에이전트를 동시에 실행하지 않으며" in payload["workflow-prompt.md"]
     assert plan in payload["original-plan.md"]
     assert 'marker-end="url(#arrow)"' in payload["workflow-map.svg"]
     assert "자료 조사" in payload["workflow-map.svg"]
@@ -704,6 +717,9 @@ def run_self_test() -> dict[str, Any]:
             "valid-v2-dag",
             "harness-order",
             "three-artifact-contract",
+            "evidence-based-stall-detection",
+            "checkpoint-recovery",
+            "bounded-sequential-replacement",
             "svg-arrow-marker",
             "cycle-rejection",
             "zero-file-write",

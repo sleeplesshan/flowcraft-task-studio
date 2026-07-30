@@ -57,6 +57,26 @@ Use this contract when creating or repairing the graph before packaging.
 - Use empty arrays for unspecified `inputs`, `allowedTools`, and `fileScope`.
 - Use `position: {"x": 0, "y": 0}` when no saved canvas position exists.
 
+## Stall recovery contract
+
+- Write delegated instructions, outputs, and completion criteria so an
+  orchestrator can distinguish completed scope from remaining scope.
+- For long repeated work, name the assigned ranges and useful checkpoint
+  boundaries. Do not add pre-emptive backup nodes.
+- Do not interrupt an agent that still emits meaningful progress merely because
+  it is slow.
+- Treat explicit failure, timeout or session loss, three progress-free
+  repetitions, or one unanswered status check plus one observation interval as
+  evidence of a stall.
+- Recover available partial results once and validate them before reuse.
+- If verified partial results safely satisfy a downstream input, continue that
+  work with an explicit reduced scope and propagate missing coverage and quality
+  limits.
+- Start at most one sequential replacement for the same contract. Give it the
+  verified checkpoint and remaining scope, and never rerun completed work.
+- If recovery fails, continue independent branches and block only dependent
+  work.
+
 ## Artifact authority
 
 The generated `workflow-prompt.md` is the execution authority.

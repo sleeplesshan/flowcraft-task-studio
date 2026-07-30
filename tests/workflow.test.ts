@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   countSubAgents,
@@ -74,6 +75,10 @@ describe("v2 meta prompt generation", () => {
     expect(result).toContain("이미지 150개");
     expect(result).toContain("비중복 배치");
     expect(result).toContain("병렬화해도 처리량이 늘지 않는 제약");
+    expect(result).toContain("[정체 복구를 위한 작업 계약 규칙]");
+    expect(result).toContain("체크포인트 단위");
+    expect(result).toContain("남은 범위만 이어받");
+    expect(result).toContain("실패 대비용 백업 노드");
     expect(result).toContain("[출력 전 내부 검수]");
     expect(result).toContain("예상 작업량과 병목");
     expect(result).toContain("검수가 반영된 최종 JSON만 출력");
@@ -372,6 +377,22 @@ describe("DAG, policy and parallel contract validation", () => {
 });
 
 describe("v2 Markdown export", () => {
+  it("keeps the public handoff skill orchestration policies in sync", () => {
+    const skillScript = readFileSync(
+      new URL(
+        "../skills/flowcraft-codex-handoff/scripts/flowcraft_handoff.py",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    expect(skillScript).toContain(
+      `SYSTEM_HARNESS = """${SYSTEM_HARNESS}"""`,
+    );
+    expect(skillScript).toContain(
+      `FAILURE_POLICY = """${FAILURE_POLICY}"""`,
+    );
+  });
+
   it("preserves harness/failure-policy order and emits the full task contract", () => {
     const markdown = graphToMarkdown(
       sampleGraph,
@@ -381,6 +402,16 @@ describe("v2 Markdown export", () => {
     expect(markdown.startsWith(`${SYSTEM_HARNESS}\n\n${FAILURE_POLICY}`)).toBe(
       true,
     );
+    expect(SYSTEM_HARNESS).toContain("시간 경과만으로 정체를 판단하지 않습니다");
+    expect(SYSTEM_HARNESS).toContain("새 결과 없이 3회 이상 반복");
+    expect(SYSTEM_HARNESS).toContain("상태 확인을 최대 1회");
+    expect(FAILURE_POLICY).toContain("오케스트레이션 상태 `stalled`");
+    expect(FAILURE_POLICY).toContain("체크포인트로 1회 회수");
+    expect(FAILURE_POLICY).toContain("대체 서브 에이전트");
+    expect(FAILURE_POLICY).toContain("완료된 범위를 다시 수행하지 않습니다");
+    expect(FAILURE_POLICY).toContain("품질 한계를 전달한 축소 범위");
+    expect(markdown).toContain("대체 에이전트를 최대 한 번 순차 실행");
+    expect(markdown).toContain("대체 에이전트를 동시에 실행하지 않으며");
     expect(markdown).toContain("**Workflow schema:** v2");
     expect(markdown).toContain("## [작업별 실행 계약]");
     expect(markdown).toContain("**실행 역할:**");
@@ -421,6 +452,9 @@ describe("v2 Markdown export", () => {
     expect(prompt).toContain("schemaVersion 2");
     expect(prompt).toContain('type "workflowTask"');
     expect(prompt).toContain('"schemaVersion": 2');
+    expect(prompt).toContain("체크포인트");
+    expect(prompt).toContain("이어받기 경계");
+    expect(prompt).toContain("실패 대비용 백업 노드");
     expect(prompt).not.toContain('"type": "subAgentTask"');
   });
 

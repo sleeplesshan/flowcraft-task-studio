@@ -1,6 +1,6 @@
 ---
 name: flowcraft-codex-handoff
-description: Convert a Codex or Claude plan-mode meta-prompt into a validated FlowCraft v2 task DAG, then package the original plan, graph-derived Markdown execution prompt, and crisp SVG node map for handoff to Codex. Use when users ask to graph a plan with FlowCraft, prepare a multi-agent workflow handoff, send a plan plus Markdown plus node image to Codex, or dry-run validation without executing the planned work.
+description: Convert a Codex or Claude plan-mode meta-prompt into a validated FlowCraft v2 task DAG, then package the original plan, recovery-aware Markdown execution prompt, and crisp SVG node map for handoff to Codex. Use when users ask to graph a plan with FlowCraft, prepare a resilient multi-agent workflow handoff, send a plan plus Markdown plus node image to Codex, or dry-run validation without executing the planned work.
 ---
 
 # FlowCraft Codex Handoff
@@ -48,6 +48,25 @@ work unless the user separately requests execution after reviewing the handoff.
 - Do not create more subagents than the graph's delegated task count or policy
   limit.
 - Do not split one graph task into extra role-based subagents.
+- Wait while an agent shows meaningful progress. Elapsed time alone is not stall
+  evidence.
+- Classify a task as stalled only after explicit runtime failure, timeout or
+  session loss, three progress-free repetitions of the same error or action, or
+  one unanswered status check followed by one provider-appropriate observation
+  interval.
+- After a verified stall, stop only the affected agent and recover available
+  messages, changed files, logs, and partial outputs once as a checkpoint.
+- Validate the checkpoint against the task completion criteria. Preserve
+  completed scope and label incomplete scope instead of treating partial work
+  as success.
+- If a partial checkpoint is sufficient for a downstream task, continue with an
+  explicitly reduced scope and pass its missing coverage and quality limits
+  forward. Otherwise continue only independent branches.
+- If work remains, start at most one replacement agent with the original
+  contract, verified checkpoint, failure cause, and remaining scope. Never run
+  the original and replacement concurrently or repeat completed work.
+- If replacement also fails, block only tasks that cannot safely proceed from
+  the verified checkpoint or an independent input.
 - Use SVG as the default image so node text stays sharp when zoomed.
 - Do not claim the handoff was transmitted unless all three artifacts are
   present in the response or explicitly attached to the receiving Codex task.

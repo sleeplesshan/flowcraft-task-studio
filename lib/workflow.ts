@@ -169,15 +169,17 @@ const NODE_HEIGHT = 210;
 const PARALLEL_LEVEL_REQUIREMENT = "작업은 모두 같은 실행 단계에 있어야 합니다.";
 const PARALLEL_DEPENDENCY_REQUIREMENT = "구성원 사이에 의존 경로가 있습니다";
 
-export const SYSTEM_HARNESS = `> ⚠️ **[System Harness: Strict Timeout & Interruption Policy]**
-> 메인 에이전트는 서브 에이전트에게 작업을 할당한 후, 서브 에이전트의 처리가 늦어지더라도 **절대 개입하거나 재촉하지 마십시오.**
-> "지금 나온 데까지 정리해!", "요약해서 가져와!"와 같이 응답을 강제로 중단시키거나 불완전한 상태에서 출력을 요구하는 행위는 엄격히 금지됩니다. 반드시 서브 에이전트의 전체 프로세스가 완료되어 최종 결과물을 반환할 때까지 대기(Wait) 상태를 유지해야 합니다.`;
+export const SYSTEM_HARNESS = `> ⚠️ **[System Harness: Patient Wait & Evidence-Based Stall Recovery]**
+> 메인 에이전트는 서브 에이전트에게 유의미한 진행 신호가 있는 동안, 단지 오래 걸린다는 이유로 재촉하거나 중단하지 않고 완료까지 기다립니다.
+> 시간 경과만으로 정체를 판단하지 않습니다. 런타임의 \`failed | cancelled\` 반환, 세션·도구의 명시적 timeout 또는 연결 소실, 같은 오류나 같은 동작이 새 결과 없이 3회 이상 반복되는 경우를 객관적 정체 신호로 봅니다.
+> 객관적 신호가 불충분하면 상태 확인을 최대 1회 수행한 뒤 제공자 환경에 맞는 한 번의 관찰 구간을 더 기다립니다. 새 메시지, 도구 성공, 파일 변경 등 진행 신호가 확인되면 기존 에이전트를 계속 기다립니다.`;
 
-export const FAILURE_POLICY = `> 🛡️ **[Failure Policy: Bounded Retry & Dependency Isolation]**
-> 각 작업의 terminal state는 \`success | failed | cancelled\` 중 하나로 기록합니다.
-> 런타임 또는 제공자가 \`failed\`를 반환하면 동일한 작업 범위와 완료 조건으로 최대 1회만 재시도합니다.
-> 두 번째 실패 또는 \`cancelled\` 이후에는 해당 결과에 의존하는 작업만 중단하고, 독립적인 분기는 계속 진행해 완료할 수 있습니다.
-> 메인 에이전트는 중단이나 불완전한 요약을 요구하지 않으며, 최종 보고에 실패 원인과 차단된 의존 작업을 명시합니다.`;
+export const FAILURE_POLICY = `> 🛡️ **[Failure Policy: Checkpoint Recovery & Bounded Replacement]**
+> 각 작업의 provider terminal state는 \`success | failed | cancelled\`로 기록하고, 위 객관적 정체 조건을 충족한 비종료 작업은 오케스트레이션 상태 \`stalled\`로 기록합니다.
+> \`failed | cancelled | stalled\`이면 해당 에이전트만 중단하고, 확보 가능한 메시지·변경 파일·로그·부분 산출물을 체크포인트로 1회 회수합니다. 불완전한 체크포인트를 \`success\`로 간주하지 않습니다.
+> 체크포인트가 완료 조건을 충족하면 그 결과로 다음 의존 작업을 진행합니다. 일부만 유효하면 완료·미완료 범위를 기록하고 후속 작업의 입력과 목표를 안전하게 충족할 수 있는지 검증합니다. 가능하면 누락 범위와 품질 한계를 전달한 축소 범위로 계속하고, 불가능하면 독립 작업만 계속합니다.
+> 남은 작업이 필요하면 원래 작업 계약, 검증된 체크포인트, 미완료 범위, 실패 원인을 새 대체 서브 에이전트에게 전달하여 최대 1회만 이어서 수행합니다. 기존 에이전트와 대체 에이전트를 동시에 실행하지 않고 완료된 범위를 다시 수행하지 않습니다.
+> 대체 시도도 실패·취소·정체되면 해당 결과에 의존하는 작업만 중단하고 독립 분기는 계속합니다. 최종 보고에는 정체 근거, 회수한 결과, 대체 여부, 남은 공백과 차단된 의존 작업을 명시합니다.`;
 
 export const sampleGraph: WorkflowGraph = layoutGraph({
   schemaVersion: WORKFLOW_SCHEMA_VERSION,
@@ -308,6 +310,11 @@ ${trimmed}
 7. parallelGroupId는 같은 위상 단계에서 동시에 실행 가능한 delegated 작업에만 지정하세요.
 8. 같은 병렬 그룹의 작업들은 outputs 항목과 fileScope 항목이 서로 겹치면 안 됩니다.
 
+[정체 복구를 위한 작업 계약 규칙]
+1. delegated 작업의 instruction, outputs, completionCriteria는 완료된 범위와 미완료 범위를 구분할 수 있게 작성하세요.
+2. 오래 걸리는 반복 작업은 담당 범위와 체크포인트 단위를 명시해, 대체 에이전트가 검증된 결과를 보존하고 남은 범위만 이어받을 수 있게 하세요.
+3. 실패 대비용 백업 노드를 미리 추가하지 마세요. 대체 에이전트는 실행 시 같은 작업 계약을 이어받는 최대 1회의 복구 시도입니다.
+
 [출력 전 내부 검수]
 1. JSON을 출력하기 전에 각 작업의 예상 작업량과 병목을 스스로 검수하세요.
 2. 지나치게 작은 위임은 인접 작업이나 main 작업에 병합하고, 한 서브에이전트에 몰린 과도한 작업은 독립 산출물 기준으로만 재분배하세요.
@@ -385,6 +392,8 @@ export function generateOptimizationPrompt(
 - 같은 산출물이나 컨텍스트를 공유하는 역할은 하나의 노드로 병합합니다.
 - 단, 수십·수백 개의 독립적인 반복 산출물이 한 작업의 병목이 되면 예산 안에서 비슷한 크기의 비중복 배치로 유지하거나 재분할합니다.
 - 배치 작업은 담당 범위·수량·산출물·fileScope를 겹치지 않게 명시하고 항목마다 노드를 만들지 않습니다.
+- delegated 작업은 완료·미완료 범위와 체크포인트를 판별할 수 있게 작성하고, 대체 에이전트가 완료된 범위를 반복하지 않도록 이어받기 경계를 명시합니다.
+- 실패 대비용 백업 노드는 추가하지 않습니다. 대체 에이전트는 같은 작업 계약에 대한 최대 1회의 순차 복구 시도입니다.
 - 병렬 그룹의 outputs와 fileScope는 서로 겹치지 않게 분리합니다.
 - 모든 outputs와 completionCriteria는 최소 1개를 유지합니다.
 - schemaVersion 2와 type "workflowTask"를 유지하고 isParallel은 출력하지 않습니다.
@@ -1033,7 +1042,8 @@ ${FAILURE_POLICY}
 - **전체 노드 허용 상한:** 최대 ${policy.maxTotalNodes}개
 - **현재 위임 작업:** ${countSubAgents(graph)}개
 - \`assignee: main\` 작업은 메인 에이전트가 직접 수행합니다.
-- \`assignee: delegated\` 작업마다 최대 한 개의 서브 에이전트만 생성합니다.
+- \`assignee: delegated\` 작업마다 기본 서브 에이전트 한 개를 실행하며, 객관적 정체·실패가 확인된 경우에만 같은 계약을 이어받는 대체 에이전트를 최대 한 번 순차 실행합니다.
+- 기존 에이전트와 대체 에이전트를 동시에 실행하지 않으며, 대체 시도는 새 작업 노드를 추가하지 않습니다.
 - 정의된 작업을 역할별로 다시 분해하여 추가 서브 에이전트를 만들지 않습니다.
 
 ## [전체 작업 목표]

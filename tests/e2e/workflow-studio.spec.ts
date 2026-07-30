@@ -117,6 +117,9 @@ test("generates and copies a provider-neutral prompt", async ({
   await expect
     .poll(() => page.evaluate(() => navigator.clipboard.readText()))
     .toContain("[출력 전 내부 검수]");
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+    .toContain("[정체 복구를 위한 작업 계약 규칙]");
 });
 
 test("copies the validated Markdown instruction without downloading a file", async ({
@@ -134,6 +137,9 @@ test("copies the validated Markdown instruction without downloading a file", asy
   );
   expect(copied).toContain("## [전체 작업 목표]");
   expect(copied).toContain("## [작업별 실행 계약]");
+  expect(copied).toContain("오케스트레이션 상태 `stalled`");
+  expect(copied).toContain("대체 서브 에이전트");
+  expect(copied).toContain("품질 한계를 전달한 축소 범위");
   await expect(page.locator(".toast")).toContainText(
     "작업 지시서: 클립보드에 복사했습니다.",
   );
@@ -618,6 +624,8 @@ test("blocks legacy export until the migrated task contract is confirmed", async
     true,
   );
   expect(markdown).toContain("success | failed | cancelled");
+  expect(markdown).toContain("체크포인트로 1회 회수");
+  expect(markdown).toContain("완료된 범위를 다시 수행하지 않습니다");
   expect(markdown).toContain("## [작업별 실행 계약]");
   expect(markdown).toContain("### 레거시 작업");
 });
